@@ -1203,6 +1203,9 @@ void GraphExecutor::pack_memory(BuiltPlan &plan, TensorBundle &input_map,
           auto node = uid_to_node.at(node_uid);
           node_to_grad_iid[node_uid] = buf.local_id;
           trace.allocate(buf.local_id, buf.bytes, buf.alignment, step, grad_ref_counts_[node]);
+        } else if (buf.role == BufferRole::GradientContribution) {
+          trace.allocate(buf.local_id, buf.bytes, buf.alignment, step, 1);
+          trace.release(buf.local_id, step);
         } else if (buf.role == BufferRole::Workspace) {
           trace.allocate(buf.local_id, buf.bytes, buf.alignment, step, 1);
           trace.release(buf.local_id, step);

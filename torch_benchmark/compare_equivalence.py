@@ -3,9 +3,48 @@ import os
 import sys
 import argparse
 import json
+import re
 import numpy as np
 from pathlib import Path
 from tabulate import tabulate
+
+
+def topological_key(name):
+    """Return the execution-order key for TunX/PyTorch operator names."""
+    base_name = name
+    for suffix in (".act.grad.bin", ".act.bin", ".batch_mean.bin", ".batch_invar.bin",
+                   ".running_mean.bin", ".running_var.bin", ".weight.grad",
+                   ".bias.grad", ".weight.updated", ".bias.updated",
+                   ".weight", ".bias", ".grad", ".updated"):
+        if base_name.endswith(suffix):
+            base_name = base_name[:-len(suffix)]
+            break
+
+    if base_name == "conv1":
+        return (0, 0, 0, name)
+    if base_name == "bn1":
+        return (0, 1, 0, name)
+    if base_name == "maxpool":
+        return (0, 2, 0, name)
+
+    match = re.fullmatch(r"layer(\d+)_block(\d+)_(conv|bn)(\d+)", base_name)
+    if match:
+        stage, block, operator, index = match.groups()
+        operator_order = {"conv1": 0, "bn0": 1, "conv2": 2, "bn1": 3,
+                          "conv3": 4, "bn2": 5, "conv0": 6, "bn3": 7}
+        return (1, int(stage), int(block), operator_order[f"{operator}{index}"], name)
+
+    tail_order = {"avgpool": 0, "flatten": 1, "fc": 2}
+    if base_name in tail_order:
+        return (2, tail_order[base_name], 0, 0, name)
+
+    numbers = tuple(int(value) for value in re.findall(r"\d+", base_name))
+    return (3, base_name, numbers, name)
+
+
+def sort_results(results):
+    results.sort(key=lambda result: topological_key(result["name"]))
+    return results
 
 def load_tensor_bin(path, dtype=np.float32):
     if not os.path.exists(path):
@@ -69,6 +108,7 @@ def compare_tensors(t1, t2, name, rtol=1e-3, atol=1e-3):
 def print_table(title, results):
     if not results:
         return
+    sort_results(results)
     print(f"\n--- {title} ---")
     table_data = [[r['name'], f"{r['max_abs']:.2e}", f"{r['p99_abs']:.2e}", f"{r['max_rel']:.2e}",
                    f"{r['normalized_l2']:.2e}", f"{r['cos_sim']:.6f}", r['allclose'],
@@ -165,7 +205,7 @@ def main():
         
     missing_files = False
     
-    for name in sorted(param_names):
+    for name in sorted(param_names, key=topological_key):
         # Compare gradients
         pt_grad = load_tensor_bin(os.path.join(args.pt_dir, f"{name}.grad.bin"))
         tunx_grad = load_tensor_bin(os.path.join(args.tunx_dir, f"{name}.grad.bin"))

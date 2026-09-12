@@ -84,8 +84,8 @@ __global__ void relu_dgrad_vec_kernel(const IO_T* grad_output, IO_T* grad_input,
 }
 
 template <typename IO_T>
-__global__ void relu_dgrad_tail_kernel(const IO_T* grad_output, IO_T* grad_input, const IO_T* output,
-                                       size_t offset, size_t tail_elements) {
+__global__ void relu_dgrad_tail_kernel(const IO_T* grad_output, IO_T* grad_input,
+                                       const IO_T* output, size_t offset, size_t tail_elements) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= tail_elements) return;
 
@@ -109,15 +109,16 @@ void CUDAEngine::relu_fwd(engine_handle backend_handle, const ReLUStats& stats, 
       size_t n_vectors = num_elements / VecSize;
       if (n_vectors > 0) {
         int blocks = (n_vectors + threads - 1) / threads;
-        relu_fwd_vec_kernel<IO_T><<<blocks, threads, 0, stream>>>(static_cast<const IO_T*>(input),
-                                                                  static_cast<IO_T*>(output), n_vectors);
+        relu_fwd_vec_kernel<IO_T><<<blocks, threads, 0, stream>>>(
+            static_cast<const IO_T*>(input), static_cast<IO_T*>(output), n_vectors);
       }
       size_t tail_offset = n_vectors * VecSize;
       size_t tail_elements = num_elements - tail_offset;
       if (tail_elements > 0) {
         int blocks = (tail_elements + threads - 1) / threads;
-        relu_fwd_tail_kernel<IO_T><<<blocks, threads, 0, stream>>>(
-            static_cast<const IO_T*>(input), static_cast<IO_T*>(output), tail_elements, tail_offset);
+        relu_fwd_tail_kernel<IO_T><<<blocks, threads, 0, stream>>>(static_cast<const IO_T*>(input),
+                                                                   static_cast<IO_T*>(output),
+                                                                   tail_offset, tail_elements);
       }
     }
   });
@@ -134,15 +135,16 @@ void CUDAEngine::relu_inf(engine_handle backend_handle, const ReLUStats& stats, 
       size_t n_vectors = num_elements / VecSize;
       if (n_vectors > 0) {
         int blocks = (n_vectors + threads - 1) / threads;
-        relu_fwd_vec_kernel<IO_T><<<blocks, threads, 0, stream>>>(static_cast<const IO_T*>(input),
-                                                                  static_cast<IO_T*>(output), n_vectors);
+        relu_fwd_vec_kernel<IO_T><<<blocks, threads, 0, stream>>>(
+            static_cast<const IO_T*>(input), static_cast<IO_T*>(output), n_vectors);
       }
       size_t tail_offset = n_vectors * VecSize;
       size_t tail_elements = num_elements - tail_offset;
       if (tail_elements > 0) {
         int blocks = (tail_elements + threads - 1) / threads;
-        relu_fwd_tail_kernel<IO_T><<<blocks, threads, 0, stream>>>(
-            static_cast<const IO_T*>(input), static_cast<IO_T*>(output), tail_elements, tail_offset);
+        relu_fwd_tail_kernel<IO_T><<<blocks, threads, 0, stream>>>(static_cast<const IO_T*>(input),
+                                                                   static_cast<IO_T*>(output),
+                                                                   tail_offset, tail_elements);
       }
     }
   });

@@ -21,6 +21,7 @@ int main(int argc, char** argv) {
   std::string pt_dir = "";
   std::string tunx_dir = "";
   size_t batch_size = 1;
+  std::string executor_mode = "optimized";
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -32,6 +33,8 @@ int main(int argc, char** argv) {
       tunx_dir = argv[++i];
     } else if (arg == "--batch-size" && i + 1 < argc) {
       batch_size = std::stoi(argv[++i]);
+    } else if (arg == "--executor-mode" && i + 1 < argc) {
+      executor_mode = argv[++i];
     } else {
       std::cerr << "Unknown argument: " << arg << std::endl;
       return 1;
@@ -40,7 +43,8 @@ int main(int argc, char** argv) {
 
   if (pt_dir.empty() || tunx_dir.empty()) {
     std::cerr << "Usage: " << argv[0]
-              << " --model <name> --pt-dir <dir> --tunx-dir <dir> [--batch-size <N>]" << std::endl;
+              << " --model <name> --pt-dir <dir> --tunx-dir <dir> [--batch-size <N>]"
+              << " [--executor-mode optimized|naive|linear|branching|joining]" << std::endl;
     return 1;
   }
 
@@ -140,6 +144,19 @@ int main(int argc, char** argv) {
   std::cout << "Running forward pass..." << std::endl;
   GraphExecutor executor(graph);
 
+  SolverOptions solver_options;
+  if (executor_mode == "naive") {
+    solver_options = SolverOptions{true, false, false, false};
+  } else if (executor_mode == "linear") {
+    solver_options = SolverOptions{false, true, false, false};
+  } else if (executor_mode == "branching") {
+    solver_options = SolverOptions{false, true, true, false};
+  } else if (executor_mode == "joining") {
+    solver_options = SolverOptions{false, true, false, true};
+  } else if (executor_mode != "optimized") {
+    std::cerr << "Unknown executor mode: " << executor_mode << std::endl;
+    return 1;
+  }
   std::map<std::string, Tensor> captured_acts;
   executor.set_forward_hook(
       [&](const Edge& edge, const std::map<std::string, Tensor>& consumers_data) {
@@ -155,6 +172,7 @@ int main(int argc, char** argv) {
       });
 
   TensorBundle input_tensors{{"input", inputs}};
+  executor.build_plans(input_tensors, solver_options);
 
   TensorBundle outputs = executor.forward(input_tensors);
   Tensor predictions = outputs.get("output");
